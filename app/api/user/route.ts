@@ -3,8 +3,8 @@ import { db } from "@/lib/db";
 import { currentUser } from "@clerk/nextjs/server";
 
 export async function GET() {
-  const user = await currentUser();
-  const userId = user?.id;
+  const clerkUser = await currentUser();
+  const userId = clerkUser?.id;
 
   if (!userId) {
     return NextResponse.json({
