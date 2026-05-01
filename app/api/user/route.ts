@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { auth } from "@clerk/nextjs/server";
+import { currentUser } from "@clerk/nextjs/server";
 
 export async function GET() {
-  const user = auth();
-  const userId = await auth();
+  const user = await currentUser();
+  const userId = user?.id;
 
   if (!userId) {
     return NextResponse.json({
