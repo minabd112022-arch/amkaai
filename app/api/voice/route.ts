@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     if (!userId) {
       return NextResponse.json(
@@ -22,31 +22,34 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔍 user
+    // 👤 get user (FIX: clerkId not id)
     let user = await db.user.findUnique({
-      where: { id: userId },
+      where: { clerkId: userId },
     });
 
+    // 🆕 create user if not exists
     if (!user) {
       user = await db.user.create({
-        data: { id: userId },
+        data: {
+          clerkId: userId,
+        },
       });
     }
 
-    // 🔢 count
+    // 🔢 voice usage count
     const count = await db.voice.count({
-      where: { userId },
+      where: { userId: userId },
     });
 
-    // 🎯 limit
-    if (!user.isPro && count >= 5) {
+    // ⚠️ FREE limit check (schema uses "plan", not isPro)
+    if (user.plan !== "PRO" && count >= 5) {
       return NextResponse.json(
         { error: "Free limit reached. Upgrade to Pro." },
         { status: 403 }
       );
     }
 
-    // 🎤 ElevenLabs
+    // 🎤 ElevenLabs API
     const res = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${process.env.ELEVEN_VOICE_ID}`,
       {
@@ -77,19 +80,21 @@ export async function POST(req: Request) {
 
     const audioUrl = `data:audio/mpeg;base64,${base64}`;
 
-    // 💾 save
+    // 💾 save voice
     await db.voice.create({
       data: {
         text,
         url: audioUrl,
-        userId,
+        userId: userId,
       },
     });
 
-    return NextResponse.json({ audio: audioUrl });
+    return NextResponse.json({
+      audio: audioUrl,
+    });
 
   } catch (error) {
-    console.log("SERVER ERROR:", error);
+    console.error("VOICE ERROR:", error);
 
     return NextResponse.json(
       { error: "Server error" },

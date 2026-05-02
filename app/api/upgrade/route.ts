@@ -4,18 +4,25 @@ import { db } from "@/lib/db";
 
 export async function POST() {
   try {
-    const { userId } = auth();
-    if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+    const { userId } = await auth();
 
-    // ✅ تحديث المستخدم
-    await db.user.update({
+    // 🔒 تأكيد تسجيل الدخول
+    if (!userId) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    // 👑 ترقية المستخدم إلى PRO + إضافة credits
+    const updatedUser = await db.user.update({
       where: { clerkId: userId },
       data: {
         plan: "PRO",
+        credits: {
+          increment: 50, // 🎁 bonus PRO
+        },
       },
     });
 
-    // 🚀 تسريع كل الطلبات الحالية
+    // 🚀 رفع أولوية كل المهام القديمة
     await db.videoJob.updateMany({
       where: {
         userId,
@@ -24,16 +31,25 @@ export async function POST() {
         },
       },
       data: {
-        priority: 1,
+        priority: 1, // PRO priority
       },
     });
 
     return NextResponse.json({
       success: true,
+      message: "User upgraded to PRO successfully",
+      user: {
+        plan: updatedUser.plan,
+        credits: updatedUser.credits,
+      },
     });
 
   } catch (error) {
-    console.log("UPGRADE ERROR:", error);
-    return new NextResponse("Server error", { status: 500 });
+    console.error("UPGRADE ERROR:", error);
+
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

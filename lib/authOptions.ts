@@ -1,40 +1,39 @@
 import GoogleProvider from "next-auth/providers/google";
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "./prisma";
+import type { NextAuthOptions } from "next-auth";
 
-export const authOptions = {
+export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
 
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
 
   session: {
-    strategy: "jwt",
+    strategy: "jwt" as const,
   },
 
   callbacks: {
-    async jwt({ token, user }: any) {
-      // أول تسجيل دخول
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
       }
       return token;
     },
 
-    async session({ session, token }: any) {
+    async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id;
+        (session.user as any).id = token.id;
 
-        // 🧠 جلب credits من database
         const dbUser = await prisma.user.findUnique({
-          where: { id: token.id },
+          where: { id: token.id as string },
         });
 
-        session.user.credits = dbUser?.credits || 0;
+        (session.user as any).credits = dbUser?.credits || 0;
       }
 
       return session;
@@ -42,7 +41,7 @@ export const authOptions = {
   },
 
   pages: {
-    signIn: "/", // تقدر تغيرها لاحقاً
+    signIn: "/",
   },
 
   secret: process.env.NEXTAUTH_SECRET,

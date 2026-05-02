@@ -4,14 +4,20 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2026-03-25.dahlia",
 });
 
 export async function POST(req: Request) {
   console.log("🔥 WEBHOOK HIT");
 
   const body = await req.text();
-  const signature = headers().get("stripe-signature") as string;
+
+  const headersList = await headers();
+  const signature = headersList.get("stripe-signature");
+
+  if (!signature) {
+    return new NextResponse("Missing signature", { status: 400 });
+  }
 
   let event: Stripe.Event;
 
@@ -30,21 +36,18 @@ export async function POST(req: Request) {
 
   try {
     // =============================
-    // ✅ CHECKOUT SUCCESS
+    // 💰 CHECKOUT SUCCESS
     // =============================
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
 
-      const userId = session.metadata?.userId; // 🔥 الأفضل
+      const userId = session.metadata?.userId;
       const email = session.customer_details?.email;
       const customerId = session.customer as string;
       const subscriptionId = session.subscription as string;
 
       console.log("💰 Payment success");
-      console.log("👤 userId:", userId);
-      console.log("📧 Email:", email);
 
-      // 📦 معرفة الخطة
       const items = await stripe.checkout.sessions.listLineItems(
         session.id,
         { limit: 1 }
@@ -52,7 +55,7 @@ export async function POST(req: Request) {
 
       const priceId = items.data[0]?.price?.id;
 
-      let plan = "FREE";
+      let plan: "FREE" | "PRO" | "PREMIUM" = "FREE";
       let credits = 10;
 
       if (priceId === process.env.STRIPE_PRICE_PRO) {
@@ -65,7 +68,7 @@ export async function POST(req: Request) {
         credits = 300;
       }
 
-      // ✅ تحديث المستخدم (باستخدام userId أفضل)
+      // 👤 update user
       if (userId) {
         await db.user.update({
           where: { clerkId: userId },
@@ -77,7 +80,6 @@ export async function POST(req: Request) {
           },
         });
       } else if (email) {
-        // fallback
         await db.user.updateMany({
           where: { email },
           data: {
@@ -89,17 +91,17 @@ export async function POST(req: Request) {
         });
       }
 
-      // 💾 تسجيل الدفع
+      // 💾 payment record
       await db.payment.create({
         data: {
-          amount: session.amount_total! / 100,
-          currency: session.currency!,
-          userId: userId || email!,
+          amount: session.amount_total ? session.amount_total / 100 : 0,
+          currency: session.currency || "usd",
+          userId: userId || email || "unknown",
           stripeId: session.id,
         },
       });
 
-      // 🔥 تحديث abandoned → recovered
+      // 🔥 recover abandoned checkout
       await db.abandonedCheckout.updateMany({
         where: {
           stripeSessionId: session.id,
@@ -113,7 +115,7 @@ export async function POST(req: Request) {
     }
 
     // =============================
-    // ❌ CANCEL SUBSCRIPTION
+    // ❌ SUBSCRIPTION CANCELLED
     // =============================
     if (event.type === "customer.subscription.deleted") {
       const subscription = event.data.object as Stripe.Subscription;
@@ -132,8 +134,10 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ received: true });
+
   } catch (error) {
     console.error("❌ Webhook handler error:", error);
+
     return new NextResponse("Server Error", { status: 500 });
   }
 }

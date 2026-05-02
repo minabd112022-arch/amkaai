@@ -7,7 +7,7 @@ export async function POST() {
     // ⏱ بعد 30 دقيقة
     const limit = new Date(Date.now() - 1000 * 60 * 30);
 
-    // 🧾 جلب العمليات غير المكتملة
+    // 🧾 جلب السلات غير المكتملة
     const list = await db.abandonedCheckout.findMany({
       where: {
         createdAt: { lt: limit },
@@ -20,13 +20,18 @@ export async function POST() {
     for (const item of list) {
       if (!item.email || !item.checkoutUrl) continue;
 
-      // 📩 إرسال الإيميل
-      await sendAbandonedEmail(item.email, item.checkoutUrl);
+      // 📩 إرسال الإيميل (correct format)
+      await sendAbandonedEmail({
+        email: item.email,
+        checkoutUrl: item.checkoutUrl,
+      });
 
-      // ✅ تحديث الحالة (تم الإرسال)
+      // ✅ تحديث الحالة
       await db.abandonedCheckout.update({
         where: { id: item.id },
-        data: { recovered: true },
+        data: {
+          recovered: true,
+        },
       });
 
       sent++;

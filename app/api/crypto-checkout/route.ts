@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
 export async function POST() {
-  const { userId } = auth();
+  const { userId } = await await auth();
 
   const res = await fetch("https://api.nowpayments.io/v1/invoice", {
     method: "POST",

@@ -9,7 +9,7 @@ const replicate = new Replicate({
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
     const { prompt } = await req.json();

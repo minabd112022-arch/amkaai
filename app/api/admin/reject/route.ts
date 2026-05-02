@@ -5,7 +5,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 export async function POST(req: Request) {
   try {
     // 🔒 Admin check
-    const { userId } = auth();
+    const { userId } = await await auth(); // ✅ FIX
     const user = await currentUser();
 
     if (!userId || !user) {
@@ -45,13 +45,12 @@ export async function POST(req: Request) {
 
     // 🔥 Transaction (audit + notification)
     const result = await db.$transaction(async (tx) => {
-
       // 🔄 Update payment
       const updatedPayment = await tx.manualPayment.update({
         where: { id: paymentId },
         data: {
           status: "REJECTED",
-          rejectedBy: userEmail, // 🔥 مهم
+          rejectedBy: userEmail || "admin",
           rejectReason: reason || "No reason provided",
           updatedAt: new Date(),
         },

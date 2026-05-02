@@ -9,8 +9,11 @@ const replicate = new Replicate({
 
 export async function POST(req: Request) {
   try {
-    const { userId } = auth();
-    if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+    const { userId } = await auth();
+
+    if (!userId) {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
 
     const { jobId } = await req.json();
 
@@ -22,11 +25,12 @@ export async function POST(req: Request) {
       return new NextResponse("Job not found", { status: 404 });
     }
 
+    // ❌ cancelled state
     if (job.status === "cancelled") {
       return NextResponse.json({ status: "cancelled" });
     }
 
-    // 🔥 حساب queue حسب priority
+    // 📊 Queue calculation
     const jobsAhead = await db.videoJob.findMany({
       where: {
         status: { in: ["pending", "processing"] },
@@ -43,23 +47,22 @@ export async function POST(req: Request) {
 
     const position = jobsAhead.length;
 
-    // ⏱️ estimated time
     let estimatedSeconds = 0;
     for (const j of jobsAhead) {
       estimatedSeconds += j.priority === 1 ? 15 : 25;
     }
 
-    // ✅ finished
-    if (job.status === "done") {
+    // ✅ DONE STATE (FIXED)
+    if (job.status === "completed") {
       return NextResponse.json({
         status: "done",
-        video: job.videoUrl,
+        video: job.resultUrl, // ✅ FIXED (was videoUrl)
         position: 0,
         estimatedTime: 0,
       });
     }
 
-    // 🔍 next job (priority queue)
+    // ⏳ Not its turn yet
     const nextJob = await db.videoJob.findFirst({
       where: { status: "pending" },
       orderBy: [
@@ -68,30 +71,28 @@ export async function POST(req: Request) {
       ],
     });
 
-    // ⏳ ليس دوره
     if (nextJob?.id !== job.id) {
       return NextResponse.json({
-        status: "pending",
+        status: job.status,
         position,
         estimatedTime: estimatedSeconds,
       });
     }
 
-    // 🔄 تشغيل
+    // 🔄 Start processing
     await db.videoJob.update({
       where: { id: job.id },
       data: { status: "processing" },
     });
 
-    let steps = 20;
-    if (job.quality === "medium") steps = 30;
-    if (job.quality === "high") steps = 50;
+    // 🎬 Replicate settings
+    const steps = 30; // simplified (remove quality dependency)
 
     const output = await replicate.run(
       "cerspense/zeroscope-v2-xl",
       {
         input: {
-          prompt: job.prompt,
+          prompt: job.prompt || "",
           num_inference_steps: steps,
           guidance_scale: 7.5,
         },
@@ -100,29 +101,30 @@ export async function POST(req: Request) {
 
     const videoUrl = Array.isArray(output) ? output[0] : output;
 
-    let cost = 2;
-    if (job.quality === "medium") cost = 3;
-    if (job.quality === "high") cost = 5;
+    // 💰 cost logic (simple)
+    const cost = job.priority === 1 ? 3 : 5;
 
     await db.$transaction([
       db.video.create({
         data: {
           url: videoUrl,
-          prompt: job.prompt,
+          prompt: job.prompt || "",
           userId: job.userId,
         },
       }),
+
       db.user.update({
         where: { clerkId: job.userId },
         data: {
           credits: { decrement: cost },
         },
       }),
+
       db.videoJob.update({
         where: { id: job.id },
         data: {
-          status: "done",
-          videoUrl,
+          status: "completed", // ✅ FIXED (was done)
+          resultUrl: videoUrl, // ✅ FIXED (was videoUrl)
         },
       }),
     ]);
@@ -135,7 +137,7 @@ export async function POST(req: Request) {
     });
 
   } catch (error) {
-    console.log("STATUS ERROR:", error);
+    console.error("STATUS ERROR:", error);
     return new NextResponse("Server error", { status: 500 });
   }
 }

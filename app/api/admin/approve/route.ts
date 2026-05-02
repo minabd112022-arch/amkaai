@@ -5,7 +5,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 export async function POST(req: Request) {
   try {
     // 🔒 Admin check
-    const { userId } = auth();
+    const { userId } = await await auth(); // ✅ FIX
     const user = await currentUser();
 
     if (!userId || !user) {
@@ -43,11 +43,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Already rejected" }, { status: 400 });
     }
 
-    // 🧠 Anti-fraud (مرن)
+    // 🧠 Anti-fraud
     if (payment.verified === false && payment.aiScore !== null) {
-      return NextResponse.json({
-        error: "Payment not verified by AI",
-      }, { status: 400 });
+      return NextResponse.json(
+        { error: "Payment not verified by AI" },
+        { status: 400 }
+      );
     }
 
     // 🎯 Credits
@@ -58,7 +59,6 @@ export async function POST(req: Request) {
 
     // 🔥 Transaction
     const result = await db.$transaction(async (tx) => {
-
       // 👤 Update user
       const updatedUser = await tx.user.update({
         where: { clerkId: payment.userId },
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
         where: { id: paymentId },
         data: {
           status: "APPROVED",
-          approvedBy: userEmail, // 🔥 مهم
+          approvedBy: userEmail || "admin",
           updatedAt: new Date(),
         },
       });

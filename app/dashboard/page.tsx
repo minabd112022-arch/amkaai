@@ -5,7 +5,7 @@ import { UserButton } from "@clerk/nextjs";
 import Notifications from "@/components/notifications";
 
 export default async function Dashboard() {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) redirect("/");
 
   let user = await db.user.findUnique({

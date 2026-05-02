@@ -4,12 +4,12 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2026-03-25.dahlia",
 });
 
 export async function POST() {
   try {
-    const { userId } = auth();
+    const { userId } = await await auth();
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

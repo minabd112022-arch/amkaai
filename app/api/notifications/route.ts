@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 
 export async function GET() {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     // 🔒 Unauthorized
     if (!userId) {

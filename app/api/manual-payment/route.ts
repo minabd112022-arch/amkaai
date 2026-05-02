@@ -1,31 +1,60 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { uploadImage } from "@/lib/upload";
 
 export async function POST(req: Request) {
-  const { userId } = auth();
-  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+  try {
+    const { userId } = await await auth();
 
-  const form = await req.formData();
-  const file = form.get("file") as File;
-  const plan = form.get("plan") as string;
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
 
-  if (!file) {
-    return NextResponse.json({ error: "No file" }, { status: 400 });
+    const body = await req.json();
+
+    const { plan, screenshotUrl, rip, method, currency } = body;
+
+    if (!plan || !screenshotUrl || !method || !currency) {
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    const amount = plan === "PRO" ? 1500 : 2500;
+
+    const payment = await db.manualPayment.create({
+      data: {
+        userId,
+
+        plan,
+
+        method,       // USDT | BARIDIMOB
+        currency,     // DZD | USDT
+
+        amount,
+
+        screenshotUrl,
+
+        rip: rip || null, // optional
+
+        status: "PENDING",
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      payment,
+    });
+  } catch (error) {
+    console.error("Manual payment error:", error);
+
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
-
-  const url = await uploadImage(file);
-
-  await db.manualPayment.create({
-    data: {
-      userId,
-      plan,
-      amount: plan === "PRO" ? 1500 : 2500,
-      rip: process.env.BARIDI_RIP!,
-      screenshotUrl: url,
-    },
-  });
-
-  return NextResponse.json({ ok: true });
 }
